@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="60">
+<title>Adaptive Alpha — Live Dashboard</title>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --border: #30363d;
+  --text: #e6edf3; --text2: #8b949e; --accent: #58a6ff;
+  --green: #3fb950; --red: #f85149; --yellow: #d29922; --orange: #db6d28;
+  --purple: #bc8cff;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace; background: var(--bg); color: var(--text); font-size: 13px; }
+
+/* ── Top bar ── */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px; background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.topbar h1 { font-size: 16px; font-weight: 600; letter-spacing: 1.5px; color: var(--accent); }
+.topbar .meta { font-size: 11px; color: var(--text2); }
+.status-pill {
+  display: inline-block; padding: 4px 14px; border-radius: 12px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.status-running { background: rgba(63,185,80,0.15); color: var(--green); }
+.status-paused { background: rgba(210,153,34,0.15); color: var(--yellow); }
+.status-stopped { background: rgba(248,81,73,0.15); color: var(--red); }
+.status-offline { background: rgba(139,148,158,0.15); color: var(--text2); }
+
+/* ── Leaf tabs ── */
+.leaf-tabs {
+  display: flex; background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 0 16px; gap: 2px;
+}
+.leaf-tab {
+  padding: 10px 20px; cursor: pointer; font-size: 12px; font-weight: 600;
+  color: var(--text2); border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.leaf-tab:hover { color: var(--text); background: rgba(88,166,255,0.04); }
+.leaf-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.leaf-tab .dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px;
+}
+.leaf-tab .dot.alive { background: var(--green); }
+.leaf-tab .dot.dead { background: var(--red); }
+.leaf-tab.tab-overview { color: var(--purple); }
+.leaf-tab.tab-overview.active { color: var(--purple); border-bottom-color: var(--purple); }
+
+/* ── Regime & Benchmark bar ── */
+.shared-bar {
+  display: flex; background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 10px 20px; gap: 24px; align-items: center; font-size: 12px;
+}
+.shared-bar .label { color: var(--text2); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+.regime-badge {
+  display: inline-block; padding: 3px 12px; border-radius: 10px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+}
+.regime-risk_on { background: rgba(63,185,80,0.15); color: var(--green); }
+.regime-choppy { background: rgba(210,153,34,0.15); color: var(--yellow); }
+.regime-risk_off { background: rgba(248,81,73,0.15); color: var(--red); }
+.prob-bar {
+  display: inline-block; height: 6px; border-radius: 3px; vertical-align: middle;
+}
+.bench-item { display: flex; flex-direction: column; gap: 2px; }
+.bench-val { font-weight: 600; font-size: 13px; }
+
+/* ── Metrics row ── */
+.metrics {
+  display: flex; border-bottom: 1px solid var(--border);
+}
+.metric {
+  flex: 1; padding: 16px 20px; background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+.metric:last-child { border-right: none; }
+.metric label { display: block; font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.metric .val { font-size: 22px; font-weight: 700; }
+.green { color: var(--green); }
+.red { color: var(--red); }
+.yellow { color: var(--yellow); }
+
+/* ── Grid layout ── */
+.grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  background: var(--border);
+}
+.grid > section { background: var(--surface); padding: 16px 20px; }
+.grid.three { grid-template-columns: 1fr 1fr 1fr; }
+
+section h2 {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--accent); margin-bottom: 12px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Tables ── */
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { text-align: left; color: var(--text2); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; padding: 4px 8px 8px 0; }
+td { padding: 5px 8px 5px 0; border-top: 1px solid rgba(48,54,61,0.5); white-space: nowrap; }
+tr:hover td { background: rgba(88,166,255,0.04); }
+
+/* ── Signal bar ── */
+.signal-bar {
+  display: inline-block; height: 8px; border-radius: 4px; min-width: 2px; vertical-align: middle;
+}
+.signal-pos { background: var(--green); }
+.signal-neg { background: var(--red); }
+
+/* ── Log pane ── */
+.log-pane {
+  background: var(--bg); padding: 12px 16px;
+  max-height: 300px; overflow-y: auto;
+  font-size: 11px; line-height: 1.6;
+  border-top: 1px solid var(--border);
+}
+.log-pane .line { color: var(--text2); }
+.log-pane .line.warn { color: var(--yellow); }
+.log-pane .line.err { color: var(--red); }
+.log-pane .line.buy { color: var(--green); }
+.log-pane .line.sell { color: var(--orange); }
+
+/* ── Memory ── */
+.memory-pane {
+  background: var(--bg); padding: 12px 16px; font-size: 12px;
+  line-height: 1.7; color: var(--text2); white-space: pre-wrap; max-height: 400px; overflow-y: auto;
+}
+.memory-pane h1, .memory-pane h2, .memory-pane h3 { color: var(--accent); font-size: 13px; margin: 8px 0 4px; }
+
+/* ── Full width ── */
+.full { grid-column: 1 / -1; }
+
+/* ── Equity chart ── */
+.chart-wrap {
+  background: var(--surface); padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.chart-wrap h2 {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--accent); margin-bottom: 12px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.chart-svg { width: 100%; }
+.chart-grid { stroke: var(--border); stroke-width: 0.5; }
+.chart-axis-label { fill: var(--text2); font-size: 10px; font-family: inherit; }
+.chart-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.chart-area { opacity: 0.08; }
+.chart-dot { r: 3; opacity: 0; transition: opacity 0.15s; }
+.chart-dot:hover { opacity: 1; }
+.chart-baseline { stroke: var(--text2); stroke-width: 0.5; stroke-dasharray: 4 3; }
+.chart-tooltip {
+  position: absolute; background: var(--surface); border: 1px solid var(--border);
+  padding: 6px 10px; border-radius: 6px; font-size: 11px; pointer-events: none;
+  color: var(--text); display: none; z-index: 10; white-space: nowrap;
+}
+
+/* ── Leaf content panes (tab switching) ── */
+.leaf-pane { display: none; }
+.leaf-pane.active { display: block; }
+
+/* ── Overview comparison table ── */
+.overview-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1px; background: var(--border);
+}
+.overview-grid > .leaf-card {
+  background: var(--surface); padding: 20px;
+}
+.leaf-card h3 {
+  font-size: 14px; font-weight: 600; color: var(--accent); margin-bottom: 12px;
+}
+.leaf-card .leaf-type {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text2); margin-left: 8px;
+}
+
+/* ── Footer ── */
+.footer {
+  padding: 8px 24px; font-size: 10px; color: var(--text2);
+  background: var(--surface); border-top: 1px solid var(--border);
+  display: flex; justify-content: space-between;
+}
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+const S = {"multi_leaf": true, "leaves": [{"leaf_id": "leaf_a", "leaf_name": "Mean-Reversion", "strategy_type": "mean_reversion", "effective_state": "offline", "control": {"mode": "running"}, "process_alive": false, "portfolio": {}, "trades": [], "monitor": {}, "cadence": {}, "universe": {}, "brain": {}, "memory": "", "equity_history": [], "predictions": [], "outcomes": [], "reflections": [], "peak_equity": {}, "log_lines": []}, {"leaf_id": "leaf_b", "leaf_name": "Trend-Following", "strategy_type": "trend_following", "effective_state": "offline", "control": {"mode": "running"}, "process_alive": false, "portfolio": {}, "trades": [], "monitor": {}, "cadence": {}, "universe": {}, "brain": {}, "memory": "", "equity_history": [], "predictions": [], "outcomes": [], "reflections": [], "peak_equity": {}, "log_lines": []}], "regime": {}, "benchmark": {}, "orchestrator": {}, "generated_at": "2026-03-22 18:18:33", "effective_state": "offline", "control": {"mode": "running"}, "process_alive": false, "portfolio": {}, "trades": [], "monitor": {}, "cadence": {}, "universe": {}, "brain": {}, "memory": "", "equity_history": [], "predictions": [], "outcomes": [], "reflections": [], "peak_equity": {}, "log_lines": []};
+const isMulti = S.multi_leaf === true && S.leaves && S.leaves.length > 0;
+
+function fmt(n, dec=2) {
+  if (n == null || isNaN(n)) return '—';
+  return Number(n).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+function fmtUsd(n) { return '$' + fmt(n); }
+function pct(n) { return (n >= 0 ? '+' : '') + fmt(n * 100, 2) + '%'; }
+function clr(n) { return n >= 0 ? 'green' : 'red'; }
+function signalBar(v) {
+  const w = Math.min(Math.abs(v) * 60, 60);
+  const cls = v >= 0 ? 'signal-pos' : 'signal-neg';
+  return '<span class="signal-bar ' + cls + '" style="width:' + w + 'px"></span>';
+}
+function ago(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  const s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+function esc(s) { return (s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+// ── Tooltip helpers ──
+function showTip(evt, text) {
+  const tip = document.getElementById('chart-tooltip');
+  if (!tip) return;
+  tip.textContent = text;
+  tip.style.display = 'block';
+  const rect = evt.target.closest('.chart-wrap').getBoundingClientRect();
+  tip.style.left = (evt.clientX - rect.left + 12) + 'px';
+  tip.style.top = (evt.clientY - rect.top - 28) + 'px';
+}
+function hideTip() {
+  const tip = document.getElementById('chart-tooltip');
+  if (tip) tip.style.display = 'none';
+}
+
+// ── Tab switching ──
+function switchTab(tabId) {
+  document.querySelectorAll('.leaf-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.leaf-pane').forEach(p => p.classList.remove('active'));
+  const tab = document.querySelector('[data-tab="' + tabId + '"]');
+  const pane = document.getElementById('pane-' + tabId);
+  if (tab) tab.classList.add('active');
+  if (pane) pane.classList.add('active');
+}
+
+// ── Build leaf content (shared renderer for single and multi) ──
+function renderLeafContent(L) {
+  const equity = L.portfolio.total_equity ?? L.portfolio.equity ?? L.portfolio.total_value ?? 100000;
+  const cash = L.portfolio.cash ?? equity;
+  const positions = L.portfolio.positions || {};
+  const posCount = typeof positions === 'object' ? Object.keys(positions).length : 0;
+  const trades = L.trades || [];
+  const tradeCount = trades.length;
+  const brain = L.brain || {};
+  const cadence = L.cadence || {};
+  const eqHist = L.equity_history || [];
+  const startingEquity = eqHist.length > 0 ? eqHist[0].equity : 100000;
+  const peak = (L.peak_equity || {}).peak || Math.max(equity, ...eqHist.map(e => e.equity || 0));
+  const dd = peak > 0 ? ((equity - peak) / peak) : 0;
+  const pnl = equity - startingEquity;
+  const pnlPct = startingEquity > 0 ? pnl / startingEquity : 0;
+  const universe = L.universe || {};
+  const activeSymbols = (universe.active || []).map(a => typeof a === 'string' ? a : a.symbol);
+  const preds = L.predictions || [];
+  const recentPreds = preds.slice(-20);
+  const state = L.effective_state || 'offline';
+
+  let html = '';
+
+  // Metrics
+  html += '<div class="metrics">';
+  html += '  <div class="metric"><label>Equity</label><div class="val">' + fmtUsd(equity) + '</div></div>';
+  html += '  <div class="metric"><label>P&L</label><div class="val ' + clr(pnl) + '">' + fmtUsd(pnl) + ' (' + pct(pnlPct) + ')</div></div>';
+  html += '  <div class="metric"><label>Cash</label><div class="val">' + fmtUsd(cash) + '</div></div>';
+  html += '  <div class="metric"><label>Positions</label><div class="val">' + posCount + '</div></div>';
+  html += '  <div class="metric"><label>Peak</label><div class="val">' + fmtUsd(peak) + '</div></div>';
+  html += '  <div class="metric"><label>Drawdown</label><div class="val ' + (dd < -0.02 ? 'red' : '') + '">' + pct(dd) + '</div></div>';
+  html += '  <div class="metric"><label>Trades</label><div class="val">' + tradeCount + '</div></div>';
+  html += '</div>';
+
+  // Equity Chart
+  if (eqHist.length >= 2) {
+    const cW = 1100, cH = 260, padL = 70, padR = 20, padT = 20, padB = 40;
+    const plotW = cW - padL - padR, plotH = cH - padT - padB;
+    const eqs = eqHist.map(e => e.equity || 0);
+    const times = eqHist.map(e => e.timestamp || '');
+    const minE = Math.min(...eqs) * 0.9995;
+    const maxE = Math.max(...eqs) * 1.0005;
+    const rangeE = maxE - minE || 1;
+    const baseline = eqs[0];
+
+    function cx(i) { return padL + (i / (eqs.length - 1)) * plotW; }
+    function cy(v) { return padT + plotH - ((v - minE) / rangeE) * plotH; }
+
+    const pts = eqs.map((v, i) => cx(i).toFixed(1) + ',' + cy(v).toFixed(1)).join(' ');
+    const baseY = cy(baseline);
+    const areaFill = eqs[eqs.length - 1] >= baseline ? 'var(--green)' : 'var(--red)';
+    const lineColor = eqs[eqs.length - 1] >= baseline ? 'var(--green)' : 'var(--red)';
+    const areaPath = cx(0).toFixed(1) + ',' + baseY.toFixed(1) + ' ' + pts + ' ' + cx(eqs.length - 1).toFixed(1) + ',' + baseY.toFixed(1);
+
+    let gridLines = '';
+    const nGrid = 5;
+    for (let i = 0; i <= nGrid; i++) {
+      const v = minE + (rangeE * i / nGrid);
+      const y = cy(v);
+      gridLines += '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (cW - padR) + '" y2="' + y.toFixed(1) + '" class="chart-grid"/>';
+      gridLines += '<text x="' + (padL - 8) + '" y="' + (y + 3).toFixed(1) + '" class="chart-axis-label" text-anchor="end">' + fmtUsd(v) + '</text>';
+    }
+
+    let xLabels = '';
+    const nLabels = Math.min(8, eqs.length);
+    for (let i = 0; i < nLabels; i++) {
+      const idx = Math.round(i * (eqs.length - 1) / (nLabels - 1));
+      const t = times[idx];
+      const label = t ? t.replace('T', ' ').slice(5, 16) : '';
+      xLabels += '<text x="' + cx(idx).toFixed(1) + '" y="' + (cH - 6) + '" class="chart-axis-label" text-anchor="middle">' + label + '</text>';
+    }
+
+    let dots = '';
+    for (let i = 0; i < eqs.length; i++) {
+      const t = times[i] ? times[i].replace('T', ' ').slice(0, 16) : '';
+      const pnlPt = ((eqs[i] - baseline) / baseline * 100).toFixed(2);
+      dots += '<circle cx="' + cx(i).toFixed(1) + '" cy="' + cy(eqs[i]).toFixed(1) + '" class="chart-dot" fill="' + lineColor + '"'
+           + ' onmouseover="showTip(evt,\'' + fmtUsd(eqs[i]) + '  (' + (pnlPt >= 0 ? '+' : '') + pnlPt + '%)  ' + t + '\')"'
+           + ' onmouseout="hideTip()"/>';
+    }
+
+    html += '<div class="chart-wrap" style="position:relative">';
+    html += '<h2>Equity Curve</h2>';
+    html += '<div id="chart-tooltip" class="chart-tooltip"></div>';
+    html += '<svg class="chart-svg" viewBox="0 0 ' + cW + ' ' + cH + '" preserveAspectRatio="xMidYMid meet">';
+    html += gridLines;
+    html += '<line x1="' + padL + '" y1="' + baseY.toFixed(1) + '" x2="' + (cW - padR) + '" y2="' + baseY.toFixed(1) + '" class="chart-baseline"/>';
+    html += '<text x="' + (cW - padR + 4) + '" y="' + (baseY + 3).toFixed(1) + '" class="chart-axis-label" font-size="9" fill="var(--text2)">start</text>';
+    html += '<polygon points="' + areaPath + '" class="chart-area" fill="' + areaFill + '"/>';
+    html += '<polyline points="' + pts + '" class="chart-line" stroke="' + lineColor + '"/>';
+    html += dots;
+    html += xLabels;
+    html += '</svg>';
+    html += '</div>';
+  } else {
+    html += '<div class="chart-wrap"><h2>Equity Curve</h2><div style="color:var(--text2);padding:20px 0">Need at least 2 data points to plot</div></div>';
+  }
+
+  // Main grid
+  html += '<div class="grid">';
+
+  // Open Positions
+  html += '<section class="full">';
+  html += '<h2>Open Positions (' + posCount + ')</h2>';
+  if (posCount === 0) {
+    html += '<div style="color:var(--text2)">No open positions</div>';
+  } else {
+    html += '<table><tr><th>Symbol</th><th>Shares</th><th>Avg Entry</th><th>Current</th><th>Mkt Value</th><th>Unrealized P&L</th><th>Bars Held</th><th>Stop Loss</th><th>Entry Signal</th></tr>';
+    const posEntries = Object.entries(positions).sort((a, b) => (b[1].market_value || 0) - (a[1].market_value || 0));
+    for (const [sym, p] of posEntries) {
+      const uPnl = p.unrealized_pnl != null ? p.unrealized_pnl : 0;
+      const pctChg = p.avg_price > 0 ? ((p.current_price - p.avg_price) / p.avg_price) : 0;
+      html += '<tr>';
+      html += '<td style="font-weight:600">' + sym + '</td>';
+      html += '<td>' + fmt(p.shares, p.shares < 1 ? 6 : 2) + '</td>';
+      html += '<td>' + fmtUsd(p.avg_price) + '</td>';
+      html += '<td>' + fmtUsd(p.current_price) + '</td>';
+      html += '<td>' + fmtUsd(p.market_value) + '</td>';
+      html += '<td class="' + clr(uPnl) + '">' + fmtUsd(uPnl) + ' (' + pct(pctChg) + ')</td>';
+      html += '<td>' + (p.bars_held != null ? p.bars_held : '—') + '</td>';
+      html += '<td>' + (p.stop_loss_price ? fmtUsd(p.stop_loss_price) : '—') + '</td>';
+      html += '<td>' + (p.entry_signal != null ? p.entry_signal.toFixed(3) : '—') + '</td>';
+      html += '</tr>';
+    }
+    html += '</table>';
+  }
+  html += '</section>';
+
+  // Signals
+  html += '<section>';
+  const latestBySymbol = {};
+  for (const p of recentPreds) { latestBySymbol[p.symbol] = p; }
+  const dedupedPreds = Object.values(latestBySymbol).sort((a, b) => Math.abs(b.signal || 0) - Math.abs(a.signal || 0));
+  const activeSignals = dedupedPreds.filter(p => Math.abs(p.signal || 0) > 0.001);
+  const zeroCount = dedupedPreds.length - activeSignals.length;
+
+  html += '<h2>Latest Signals (' + activeSignals.length + ' active, ' + zeroCount + ' flat)</h2>';
+  if (dedupedPreds.length === 0) {
+    html += '<div style="color:var(--text2)">No signals yet</div>';
+  } else {
+    html += '<table><tr><th>Symbol</th><th>Signal</th><th></th><th>Factors</th><th>Time</th></tr>';
+    for (const p of dedupedPreds) {
+      const sig = p.signal || 0;
+      const factors = (p.meta && p.meta.factors) ? p.meta.factors : [];
+      const reason = (p.meta && p.meta.reason) ? p.meta.reason : '';
+      const factorHtml = factors.length > 0
+        ? factors.map(f => '<span style="display:inline-block;padding:1px 6px;margin:1px 2px;border-radius:8px;font-size:9px;background:rgba(88,166,255,0.1);color:var(--accent)">'
+          + esc(f.name) + ' <span class="' + clr(f.delta || 0) + '">' + (f.delta >= 0 ? '+' : '') + (f.delta || 0).toFixed(2) + '</span>'
+          + (f.conviction != null ? ' <span style="opacity:0.5">' + Math.round(f.conviction * 100) + '%</span>' : '')
+          + '</span>').join('')
+        : '<span style="color:var(--text2);font-size:10px">' + esc(reason) + '</span>';
+      const dimStyle = Math.abs(sig) < 0.001 ? ' style="opacity:0.35"' : '';
+      html += '<tr' + dimStyle + '>';
+      html += '<td style="font-weight:600">' + (p.symbol || '?') + '</td>';
+      html += '<td class="' + clr(sig) + '">' + (sig >= 0 ? '+' : '') + sig.toFixed(3) + '</td>';
+      html += '<td>' + signalBar(sig) + '</td>';
+      html += '<td style="white-space:normal;max-width:400px">' + factorHtml + '</td>';
+      html += '<td style="color:var(--text2)">' + ago(p.timestamp) + '</td>';
+      html += '</tr>';
+    }
+    html += '</table>';
+  }
+  html += '</section>';
+
+  // Trades
+  html += '<section>';
+  html += '<h2>Recent Trades (' + tradeCount + ' total)</h2>';
+  if (trades.length === 0) {
+    html += '<div style="color:var(--text2)">No trades yet</div>';
+  } else {
+    html += '<table><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>P&L</th><th>Factors</th></tr>';
+    for (const t of trades.slice(-15).reverse()) {
+      const side = (t.side || t.action || '').toUpperCase();
+      const sideClr = side === 'BUY' ? 'green' : 'red';
+      const tPnl = t.pnl != null ? t.pnl : (t.realized_pnl != null ? t.realized_pnl : null);
+      const hasPnl = tPnl != null;
+      const shares = t.shares || t.qty || t.quantity || '—';
+      const tFactors = t.factors || [];
+      const reason = t.reason || '';
+      const tFactorHtml = tFactors.length > 0
+        ? tFactors.map(f => '<span style="display:inline-block;padding:1px 5px;margin:1px;border-radius:6px;font-size:9px;background:rgba(88,166,255,0.08);color:var(--text2)">'
+          + esc(f.name) + (f.detail ? ' <span style="opacity:0.5">' + esc(f.detail) + '</span>' : '')
+          + '</span>').join('')
+        : '<span style="font-size:10px;color:var(--text2)">' + esc(reason) + '</span>';
+      html += '<tr>';
+      html += '<td style="color:var(--text2)">' + ago(t.timestamp || t.time) + '</td>';
+      html += '<td style="font-weight:600">' + (t.symbol || '?') + '</td>';
+      html += '<td class="' + sideClr + '">' + side + '</td>';
+      html += '<td>' + shares + '</td>';
+      html += '<td>' + fmtUsd(t.price || 0) + '</td>';
+      html += '<td class="' + (hasPnl ? clr(tPnl) : '') + '">' + (hasPnl ? fmtUsd(tPnl) : '—') + '</td>';
+      html += '<td style="white-space:normal;max-width:350px">' + tFactorHtml + '</td>';
+      html += '</tr>';
+    }
+    html += '</table>';
+  }
+  html += '</section>';
+
+  // Universe
+  html += '<section>';
+  html += '<h2>Universe (' + activeSymbols.length + ' active)</h2>';
+  html += '<table><tr><th>Symbol</th><th>Max Alloc</th><th>Note</th></tr>';
+  for (const inst of (universe.active || [])) {
+    const sym = typeof inst === 'string' ? inst : inst.symbol;
+    const alloc = typeof inst === 'object' ? (inst.max_alloc_pct || '—') : '—';
+    const note = typeof inst === 'object' ? (inst.note || '') : '';
+    html += '<tr>';
+    html += '<td style="font-weight:600">' + sym + '</td>';
+    html += '<td>' + alloc + '%</td>';
+    html += '<td style="color:var(--text2);white-space:normal;max-width:300px">' + esc(note) + '</td>';
+    html += '</tr>';
+  }
+  html += '</table>';
+  html += '</section>';
+
+  // Brain / Config
+  html += '<section>';
+  html += '<h2>Configuration</h2>';
+  html += '<table>';
+  html += '<tr><td style="color:var(--text2)">Generation</td><td style="font-weight:600">' + (brain.generation || 0) + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Thesis</td><td style="white-space:normal">' + esc(brain.thesis || '—') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Last Changed</td><td>' + (brain.last_changed || '—') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Scan Interval</td><td>' + (cadence.scan_interval_seconds || '—') + 's</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Data Interval</td><td>' + (cadence.data_interval || '—') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Data Period</td><td>' + (cadence.data_period || '—') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Hold Bars</td><td>' + (cadence.hold_bars || '—') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Market Hours Only</td><td>' + (cadence.market_hours_only ? 'Yes' : 'No') + '</td></tr>';
+  html += '<tr><td style="color:var(--text2)">Reflect Every</td><td>' + (cadence.reflect_every_n_cycles || '—') + ' cycles</td></tr>';
+  html += '</table>';
+  html += '</section>';
+
+  // Reflections
+  html += '<section class="full">';
+  html += '<h2>Reflection History</h2>';
+  const refs = L.reflections || [];
+  if (refs.length === 0) {
+    html += '<div style="color:var(--text2)">No reflections yet</div>';
+  } else {
+    html += '<table><tr><th>Time</th><th>Gen</th><th>Thesis</th><th>Confidence</th><th>Strategy</th><th>Cadence</th><th>Universe</th></tr>';
+    for (const r of refs.slice().reverse()) {
+      html += '<tr>';
+      html += '<td style="color:var(--text2)">' + ago(r.timestamp) + '</td>';
+      html += '<td>' + (r.old_generation || '?') + ' &rarr; ' + (r.new_generation || '?') + '</td>';
+      html += '<td style="white-space:normal;max-width:300px">' + esc(r.thesis || '') + '</td>';
+      html += '<td>' + (r.confidence != null ? (r.confidence * 100).toFixed(0) + '%' : '—') + '</td>';
+      html += '<td class="' + (r.strategy_ok ? 'green' : 'red') + '">' + (r.strategy_ok ? 'OK' : 'FAIL') + '</td>';
+      html += '<td class="' + (r.cadence_ok ? 'green' : 'red') + '">' + (r.cadence_ok ? 'OK' : 'FAIL') + '</td>';
+      html += '<td class="' + (r.universe_ok ? 'green' : 'red') + '">' + (r.universe_ok ? 'OK' : 'FAIL') + '</td>';
+      html += '</tr>';
+    }
+    html += '</table>';
+  }
+  html += '</section>';
+
+  // Memory
+  html += '<section class="full">';
+  html += '<h2>Strategy Memory</h2>';
+  html += '<div class="memory-pane">' + esc(L.memory || 'No memory yet') + '</div>';
+  html += '</section>';
+
+  // close grid
+  html += '</div>';
+
+  // Log
+  html += '<div style="background:var(--surface);padding:12px 20px;border-top:1px solid var(--border)">';
+  html += '<h2 style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--accent);margin-bottom:8px">Monitor Log</h2>';
+  html += '<div class="log-pane">';
+  const lines = L.log_lines || [];
+  for (const l of lines) {
+    let cls = 'line';
+    const ll = l.toLowerCase();
+    if (ll.includes('warn') || ll.includes('⚠')) cls += ' warn';
+    else if (ll.includes('error') || ll.includes('❌')) cls += ' err';
+    else if (ll.includes('buy') || ll.includes('bought')) cls += ' buy';
+    else if (ll.includes('sell') || ll.includes('sold')) cls += ' sell';
+    html += '<div class="' + cls + '">' + esc(l) + '</div>';
+  }
+  if (lines.length === 0) html += '<div class="line">No log output yet</div>';
+  html += '</div></div>';
+
+  return html;
+}
+
+// ── Build overview pane (multi-leaf comparison) ──
+function renderOverview(leaves, regime, benchmark) {
+  let html = '';
+
+  // Regime & Benchmark bar (also shown at top level)
+  html += '<div class="shared-bar" style="border-bottom:1px solid var(--border);padding:16px 20px">';
+  // Regime
+  const r = regime || {};
+  const regimeName = r.regime || 'unknown';
+  const probs = r.probabilities || {};
+  html += '<div style="flex:1">';
+  html += '<div class="label">Market Regime</div>';
+  html += '<div style="margin-top:4px">';
+  html += '<span class="regime-badge regime-' + regimeName + '">' + regimeName.replace('_', ' ') + '</span>';
+  html += '<span style="margin-left:12px;font-size:11px;color:var(--text2)">';
+  html += 'Risk-On: ' + fmt((probs.risk_on || 0) * 100, 0) + '% ';
+  html += '<span class="prob-bar" style="width:' + Math.round((probs.risk_on || 0) * 60) + 'px;background:var(--green)"></span> ';
+  html += '&nbsp; Choppy: ' + fmt((probs.choppy || 0) * 100, 0) + '% ';
+  html += '<span class="prob-bar" style="width:' + Math.round((probs.choppy || 0) * 60) + 'px;background:var(--yellow)"></span> ';
+  html += '&nbsp; Risk-Off: ' + fmt((probs.risk_off || 0) * 100, 0) + '% ';
+  html += '<span class="prob-bar" style="width:' + Math.round((probs.risk_off || 0) * 60) + 'px;background:var(--red)"></span>';
+  html += '</span>';
+  html += '</div></div>';
+
+  // Benchmarks
+  const bm = (benchmark || {}).current || {};
+  const spy = bm.SPY || {};
+  const btc = bm['BTC/USD'] || bm.BTC || {};
+  html += '<div class="bench-item"><div class="label">SPY B&H</div>';
+  html += '<div class="bench-val ' + clr(spy.buy_hold_return_pct || 0) + '">' + (spy.buy_hold_return_pct != null ? (spy.buy_hold_return_pct >= 0 ? '+' : '') + fmt(spy.buy_hold_return_pct, 2) + '%' : '—') + '</div></div>';
+  html += '<div class="bench-item"><div class="label">BTC B&H</div>';
+  html += '<div class="bench-val ' + clr(btc.buy_hold_return_pct || 0) + '">' + (btc.buy_hold_return_pct != null ? (btc.buy_hold_return_pct >= 0 ? '+' : '') + fmt(btc.buy_hold_return_pct, 2) + '%' : '—') + '</div></div>';
+  html += '</div>';
+
+  // Leaf comparison cards
+  html += '<div class="overview-grid">';
+  for (const L of leaves) {
+    const eq = L.portfolio.total_equity ?? L.portfolio.equity ?? L.portfolio.total_value ?? 100000;
+    const eqHist = L.equity_history || [];
+    const startEq = eqHist.length > 0 ? eqHist[0].equity : 100000;
+    const leafPnl = eq - startEq;
+    const leafPnlPct = startEq > 0 ? leafPnl / startEq : 0;
+    const positions = L.portfolio.positions || {};
+    const posCount = typeof positions === 'object' ? Object.keys(positions).length : 0;
+    const tradeCount = (L.trades || []).length;
+    const peakVal = (L.peak_equity || {}).peak || Math.max(eq, ...eqHist.map(e => e.equity || 0));
+    const ddVal = peakVal > 0 ? ((eq - peakVal) / peakVal) : 0;
+    const brain = L.brain || {};
+    const state = L.effective_state || 'offline';
+
+    html += '<div class="leaf-card">';
+    html += '<h3><span class="dot ' + (L.process_alive ? 'alive' : 'dead') + '" style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px"></span>';
+    html += esc(L.leaf_name || L.leaf_id) + '<span class="leaf-type">' + esc(L.strategy_type || '') + '</span></h3>';
+    html += '<span class="status-pill status-' + state + '" style="margin-bottom:12px">' + state + '</span>';
+
+    html += '<table style="margin-top:12px">';
+    html += '<tr><td style="color:var(--text2)">Equity</td><td style="font-weight:600">' + fmtUsd(eq) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">P&L</td><td class="' + clr(leafPnl) + '" style="font-weight:600">' + fmtUsd(leafPnl) + ' (' + pct(leafPnlPct) + ')</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Drawdown</td><td class="' + (ddVal < -0.02 ? 'red' : '') + '">' + pct(ddVal) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Positions</td><td>' + posCount + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Trades</td><td>' + tradeCount + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Generation</td><td>' + (brain.generation || 0) + '</td></tr>';
+    html += '<tr><td style="color:var(--text2)">Thesis</td><td style="white-space:normal">' + esc(brain.thesis || '—') + '</td></tr>';
+
+    // Alpha vs benchmarks
+    if (spy.buy_hold_return_pct != null && eqHist.length > 0) {
+      const alphaSpy = (leafPnlPct * 100) - spy.buy_hold_return_pct;
+      html += '<tr><td style="color:var(--text2)">Alpha vs SPY</td><td class="' + clr(alphaSpy) + '" style="font-weight:600">' + (alphaSpy >= 0 ? '+' : '') + fmt(alphaSpy, 2) + '%</td></tr>';
+    }
+    if (btc.buy_hold_return_pct != null && eqHist.length > 0) {
+      const alphaBtc = (leafPnlPct * 100) - btc.buy_hold_return_pct;
+      html += '<tr><td style="color:var(--text2)">Alpha vs BTC</td><td class="' + clr(alphaBtc) + '" style="font-weight:600">' + (alphaBtc >= 0 ? '+' : '') + fmt(alphaBtc, 2) + '%</td></tr>';
+    }
+
+    html += '</table>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  return html;
+}
+
+// ──────── MAIN RENDER ────────
+
+let html = '';
+
+if (isMulti) {
+  // ── MULTI-LEAF MODE ──
+  const leaves = S.leaves;
+
+  // Top bar
+  html += '<div class="topbar">';
+  html += '  <h1>ADAPTIVE ALPHA — MULTI-LEAF</h1>';
+  html += '  <div class="meta">';
+  html += '    ' + leaves.length + ' leaves';
+  const orch = S.orchestrator || {};
+  if (orch.cycle_count) html += '  &nbsp; · &nbsp; Cycle ' + orch.cycle_count;
+  html += '    &nbsp; · &nbsp; ' + S.generated_at;
+  html += '  </div>';
+  html += '</div>';
+
+  // Regime & Benchmark bar
+  const regime = S.regime || {};
+  const benchmark = S.benchmark || {};
+  const regimeName = regime.regime || 'unknown';
+  const probs = regime.probabilities || {};
+  const bm = benchmark.current || {};
+  const spy = bm.SPY || {};
+  const btc = bm['BTC/USD'] || bm.BTC || {};
+
+  html += '<div class="shared-bar">';
+  html += '<div><span class="label">Regime</span> <span class="regime-badge regime-' + regimeName + '">' + regimeName.replace('_', ' ') + '</span></div>';
+  html += '<div style="font-size:11px;color:var(--text2)">';
+  html += 'Risk-On ' + fmt((probs.risk_on || 0) * 100, 0) + '% ';
+  html += '<span class="prob-bar" style="width:' + Math.round((probs.risk_on || 0) * 50) + 'px;background:var(--green)"></span>';
+  html += ' &nbsp; Choppy ' + fmt((probs.choppy || 0) * 100, 0) + '% ';
+  html += '<span class="prob-bar" style="width:' + Math.round((probs.choppy || 0) * 50) + 'px;background:var(--yellow)"></span>';
+  html += ' &nbsp; Risk-Off ' + fmt((probs.risk_off || 0) * 100, 0) + '% ';
+  html += '<span class="prob-bar" style="width:' + Math.round((probs.risk_off || 0) * 50) + 'px;background:var(--red)"></span>';
+  html += '</div>';
+  html += '<div class="bench-item"><span class="label">SPY</span> <span class="bench-val ' + clr(spy.buy_hold_return_pct || 0) + '">' + (spy.buy_hold_return_pct != null ? (spy.buy_hold_return_pct >= 0 ? '+' : '') + fmt(spy.buy_hold_return_pct, 2) + '%' : '—') + '</span></div>';
+  html += '<div class="bench-item"><span class="label">BTC</span> <span class="bench-val ' + clr(btc.buy_hold_return_pct || 0) + '">' + (btc.buy_hold_return_pct != null ? (btc.buy_hold_return_pct >= 0 ? '+' : '') + fmt(btc.buy_hold_return_pct, 2) + '%' : '—') + '</span></div>';
+  if (regime.timestamp) html += '<div style="font-size:10px;color:var(--text2)">Updated ' + ago(regime.timestamp) + '</div>';
+  html += '</div>';
+
+  // Leaf tabs
+  html += '<div class="leaf-tabs">';
+  html += '<div class="leaf-tab tab-overview active" data-tab="overview" onclick="switchTab(\'overview\')">Overview</div>';
+  for (const L of leaves) {
+    const dotCls = L.process_alive ? 'alive' : 'dead';
+    html += '<div class="leaf-tab" data-tab="' + L.leaf_id + '" onclick="switchTab(\'' + L.leaf_id + '\')">';
+    html += '<span class="dot ' + dotCls + '"></span>';
+    html += esc(L.leaf_name || L.leaf_id);
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Overview pane
+  html += '<div class="leaf-pane active" id="pane-overview">';
+  html += renderOverview(leaves, S.regime, S.benchmark);
+  html += '</div>';
+
+  // Per-leaf panes
+  for (const L of leaves) {
+    html += '<div class="leaf-pane" id="pane-' + L.leaf_id + '">';
+    html += renderLeafContent(L);
+    html += '</div>';
+  }
+
+} else {
+  // ── SINGLE-LEAF MODE (legacy) ──
+
+  const brain = S.brain || {};
+  const cadence = S.cadence || {};
+  const universe = S.universe || {};
+  const activeSymbols = (universe.active || []).map(a => typeof a === 'string' ? a : a.symbol);
+  const state = S.effective_state || 'offline';
+
+  // Top bar
+  html += '<div class="topbar">';
+  html += '  <h1>ADAPTIVE ALPHA</h1>';
+  html += '  <div class="meta">';
+  html += '    <span class="status-pill status-' + state + '">' + state + '</span>';
+  html += '    &nbsp; Gen ' + (brain.generation || 0);
+  html += '    &nbsp; · &nbsp; Scan ' + (cadence.scan_interval_seconds || '—') + 's';
+  html += '    &nbsp; · &nbsp; ' + activeSymbols.length + ' symbols';
+  html += '  </div>';
+  html += '</div>';
+
+  // Regime bar if available
+  const regime = S.regime || {};
+  if (regime.regime) {
+    const probs = regime.probabilities || {};
+    html += '<div class="shared-bar">';
+    html += '<div><span class="label">Regime</span> <span class="regime-badge regime-' + regime.regime + '">' + regime.regime.replace('_', ' ') + '</span></div>';
+    html += '<div style="font-size:11px;color:var(--text2)">';
+    html += 'Risk-On ' + fmt((probs.risk_on || 0) * 100, 0) + '%';
+    html += ' &nbsp; Choppy ' + fmt((probs.choppy || 0) * 100, 0) + '%';
+    html += ' &nbsp; Risk-Off ' + fmt((probs.risk_off || 0) * 100, 0) + '%';
+    html += '</div>';
+    html += '</div>';
+  }
+
+  html += renderLeafContent(S);
+}
+
+// Footer
+html += '<div class="footer">';
+html += '<span>Generated: ' + S.generated_at + '</span>';
+html += '<span>' + (isMulti ? S.leaves.length + ' leaves' : 'Single mode') + ' · Auto-refresh: 60s</span>';
+html += '</div>';
+
+document.getElementById('app').innerHTML = html;
+</script>
+</body>
+</html>
