@@ -777,6 +777,9 @@ function renderLeafContent(L) {
 // ── Build overview pane (multi-leaf comparison) ──
 function renderOverview(leaves, regime, benchmark) {
   let html = '';
+  const bm = (benchmark || {}).current || {};
+  const spy = bm.SPY || {};
+  const btc = bm['BTC/USD'] || bm.BTC || {};
 
   // Leaf comparison cards
   html += '<div class="overview-grid">';
