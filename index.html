@@ -899,6 +899,7 @@ if (isMulti) {
     html += '<div class="leaf-tab" data-tab="' + esc(L.leaf_id) + '">';
     html += '<span class="dot ' + dotCls + '"></span>';
     html += esc(L.leaf_name || L.leaf_id);
+    if (L.leaf_description) html += ' <span style="color:var(--text2);font-weight:400">— ' + esc(L.leaf_description) + '</span>';
     html += '</div>';
   }
   html += '</div>';
